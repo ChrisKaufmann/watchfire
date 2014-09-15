@@ -3,16 +3,16 @@ use warnings;
 use strict;
 use JSON::Parse 'parse_json';
 use Term::ANSIColor qw(:constants);
-my $token=shift || usage();
 my $domain=shift || usage();
-my $room=shift || usage();
-my $convertimages=shift || 1;
+my $root_url="https://$domain.campfirenow.com";
+my $token=shift || gettoken();
+my $room=shift || getroom();
 $| = 1;
 
 
 my %users;
 my %entries;
-my $room_url="https://$domain.campfirenow.com/room/$room";
+my $room_url="$root_url/room/$room";
 
 while(1)
 {
@@ -24,7 +24,7 @@ while(1)
 		next if $entries{$msg->{'id'}};
 		my $user=getuser($msg->{"user_id"});
 		chomp(my $body=$msg->{'body'});
-		if($convertimages && $body=~m/http.*(\.jpg|\.jpeg|\.bmp|\.gif|\.png)$/)
+		if($body=~m/http.*(\.jpg|\.jpeg|\.bmp|\.gif|\.png)$/)
 		{
 			print BOLD, BLUE, "$user:", RESET;
 			print " $body\n";
@@ -60,6 +60,45 @@ while(1)
 	$txt='';
 	sleep 1;
 }
+sub gettoken
+{
+	print "email: ";
+	chomp(my $ea=<STDIN>);
+	print "pass: ";
+	system("stty -echo");
+	chomp(my $pass=<STDIN>);
+	print "\n";
+	system("stty echo");
+	my $raw_json=`curl -s -u$ea:$pass $root_url/users/me.json`;
+	my $user_json=parse_json($raw_json) or die("Couldn't parse JSON, raw json='$raw_json'\n");
+	use Data::Dumper;
+	return $user_json->{'user'}->{'api_auth_token'};
+}
+sub getroom
+{
+	my $rooms_json=parse_json(`curl -s -u $token:0  $root_url/rooms.json`);
+	use Data::Dumper;
+	my %rooms;
+	my $count=1;
+	foreach my $room (@{$rooms_json->{"rooms"}})
+	{
+		$rooms{$count}{"ID"}=$room->{'id'};
+		$rooms{$count}{"name"}=$room->{'name'};
+		$rooms{$count}{"topic"}=$room->{'topic'};
+		$count++;
+	}
+	foreach my $id (sort keys %rooms)
+	{
+		print "$id, $rooms{$id}{'name'}   ";
+		if($rooms{$id}{'topic'}){print "($rooms{$id}{'topic'})"}
+		print "\n";
+	}
+	print "Enter room #: ";
+	chomp(my $num=<STDIN>);
+	print Dumper $rooms{$num};
+	if(!$rooms{$num}{'ID'}){die("No room number\n");}
+	return $rooms{$num}{'ID'};
+}
 
 sub postmsg
 {
@@ -81,6 +120,11 @@ sub getuser
 
 sub usage
 {
-	print ("Usage: $0 <token> <domain> <room id>\n\tex$0 1234123412341234 mydomain 1234 <0 disable images>");
+	print "Usage: $0 <domain> [<token>]  [<room id>] 
+	ex:
+		perl $0 mydomain    (will prompt for username and pass)
+		perl $0 mydomain myapikey (will ask for room name to join)
+		perl $0 mydomain myapikey myroomid   (will join room)
+	\n";
 	exit();
 }
