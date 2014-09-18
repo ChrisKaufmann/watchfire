@@ -103,8 +103,9 @@ sub get_token
 	chomp(my $pass=<STDIN>);
 	print "\n";
 	system("stty echo");
-	my $raw_json=get_json("$root_url/users/me.json");
-	return $raw_json->{'user'}->{'api_auth_token'};
+	my $raw_json=`curl -s -u$ea:$pass $root_url/users/me.json`;
+	my $user_json=parse_json($raw_json) or die("Couldn't parse JSON, raw json='$raw_json'\n");
+	return $user_json->{'user'}->{'api_auth_token'};
 }
 sub print_users
 {
